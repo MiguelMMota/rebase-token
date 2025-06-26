@@ -206,6 +206,7 @@ contract CrossChainTest is Test {
         // get initial balance on Arbitrum
         uint256 initialArbBalance = IERC20(address(remoteToken)).balanceOf(alice);
         console.log("Remote balance before bridge: %d", initialArbBalance);
+        vm.selectFork(localFork); // in the latest version of chainlink-local, it assumes you are currently on the local fork before calling switchChainAndRouteMessage
         ccipLocalSimulatorFork.switchChainAndRouteMessage(remoteFork);
 
         console.log("Remote user interest rate: %d", remoteToken.getUserInterestRate(alice));
