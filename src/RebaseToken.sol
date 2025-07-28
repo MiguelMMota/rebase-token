@@ -81,12 +81,29 @@ contract RebaseToken is ERC20, Ownable, AccessControl {
     /*//////////////////////////////////////////////////////////////
                             PUBLIC FUNCTIONS
     //////////////////////////////////////////////////////////////*/
+    /**
+     * @notice First mints the user's accrued interest since the last update. Then, mints the new amount of tokens to the user
+     * @notice This set a new value for the user's interest rate, which will be strictly lower than the previous value
+     * @param _to The address to mint the tokens to.
+     * @param _value The number of tokens to mint, after minting the tokens from accrued interest.
+     * @dev This function increases the total supply
+     */
     function mint(address _to, uint256 _value) public onlyOwner {
         _mintAccruedInterest(_to);
+        _updateUserInterestRate(_to);
         _mint(_to, _value);
     }
 
-    function burn(address _from, uint256 _value) public onlyOwner {}
+    /**
+     * @notice Burns tokens from the sender.
+     * @param _from The address to burn the tokens from.
+     * @param _value The amount of tokens to burn.
+     * @dev This function decreases the total supply.
+     */
+    function burn(address _from, uint256 _value) public onlyOwner {
+        _mintAccruedInterest(_from);
+        _burn(_from, _value);
+    }
 
     function transfer(address _recipient, uint256 _value) public override onlyOwner returns (bool) {}
 
@@ -109,16 +126,16 @@ contract RebaseToken is ERC20, Ownable, AccessControl {
     }
 
     /**
-     * @dev adds the accrued interest of the user to the principal balance. This function mints the user's accrued interest since they last transferred or bridged tokens.
-     * @param _user the address of the user for which the interest is being minted
-     *
+     * @dev Adds the accrued interest of the user to the principal balance. This function mints the user's accrued interest since they last transferred or bridged tokens.
+     * @dev This refreshes the user's last updated time, but doesn't update their interest rate. This is intentional. We want to indicate that the interest has been minted up to the current time, but we also don't want the user's interest rate to change because interest was minted.
+     * @param _user The address of the user for which the interest is being minted.
      */
     function _mintAccruedInterest(address _user) private {
         uint256 principal = super.balanceOf(_user);
         uint256 balanceWithInterest = balanceOf(_user);
         uint256 amountToMint = balanceWithInterest - principal;
-        
-        _updateUserInterestRate(_user);
+
+        s_lastUpdatesByUser[_user] = block.timestamp;
         _mint(_user, amountToMint);
     }
 
