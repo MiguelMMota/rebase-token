@@ -3,8 +3,8 @@
 // Layout of Contract:
 // version
 // imports
-// interfaces, libraries, contracts
 // errors
+// interfaces, libraries, contracts
 // Type declarations
 // State variables
 // Events
@@ -19,7 +19,8 @@
 // public
 // internal
 // private
-// view & pure functions
+// internal & private view & pure functions
+// external & public view & pure functions
 
 pragma solidity ^0.8.24;
 
@@ -70,6 +71,12 @@ contract RebaseToken is ERC20, Ownable, AccessControl {
     /*//////////////////////////////////////////////////////////////
                            EXTERNAL FUNCTIONS
     //////////////////////////////////////////////////////////////*/
+    /**
+     * @notice Sets the interest for all users going forward.
+     * @notice This doesn't apply retroactively to existing users, unless they mint new tokens. In that case, they receive the accrued interest on the principal since the last time they accrued interest, at the original interest rate. From then on, they will accrue interest at the new (lower) rate.
+     * @param _newInterestRate The new value for the interest rate
+     * @dev The new interest rate must be lower than the previous value, to incentivise users to invest as much as possible early on.
+     */
     function setInterestRate(uint256 _newInterestRate) external {
         if (_newInterestRate >= s_interestRate) {
             revert RebaseToken__InterestRateCanOnlyDecrease(s_interestRate, _newInterestRate);
@@ -105,9 +112,26 @@ contract RebaseToken is ERC20, Ownable, AccessControl {
         _burn(_from, _value);
     }
 
-    function transfer(address _recipient, uint256 _value) public override onlyOwner returns (bool) {}
+    /**
+     * @notice Transfers tokens from the message sender to an address, after adding their recently accrued interest to their principal
+     * @param _recipient The address to transfer to
+     * @param _value The amount to transfer. If the given amount is the maximum possible uint256, then the whole balance is transferred
+     */
+    function transfer(address _recipient, uint256 _value) public override onlyOwner returns (bool) {
+        _value = _prepareTransfer(msg.sender, _recipient, _value);
+        return super.transfer(_recipient, _value);
+    }
 
-    function transferFrom(address _from, address _to, uint256 _value) public override onlyOwner returns (bool) {}
+    /**
+     * @notice Transfers tokens between two users, after adding their recently accrued interest to their principal
+     * @param _from The address to transfer from
+     * @param _to The address to transfer to
+     * @param _value The amount to transfer. If the given amount is the maximum possible uint256, then the whole balance is transferred
+     */
+    function transferFrom(address _from, address _to, uint256 _value) public override onlyOwner returns (bool) {
+        _value = _prepareTransfer(_from, _to, _value);
+        return super.transferFrom(_from, _to, _value);
+    }
 
     /*//////////////////////////////////////////////////////////////
                            INTERNAL FUNCTIONS
@@ -116,6 +140,26 @@ contract RebaseToken is ERC20, Ownable, AccessControl {
     /*//////////////////////////////////////////////////////////////
                            PRIVATE FUNCTIONS
     //////////////////////////////////////////////////////////////*/
+    /**
+     * @notice Before we make a transfer, we need to add the accrued interest for both sender and recipient, so that they accrue interest on the balances they had prior the transfer.
+     * @param _from The address to transfer from.
+     * @param _to The address to transfer to.
+     * @param _value The amount to transfer. If the given amount is the maximum possible uint256, then the whole balance is transferred
+     */
+    function _prepareTransfer(address _from, address _to, uint256 _value) private returns(uint256) {
+        _mintAccruedInterest(_from);
+
+        if (_value == type(uint256).max) {
+            _value = balanceOf(_from);
+        }
+        _mintAccruedInterest(_to);
+        if (s_interestsRatesByUser[_to] == 0) {
+            _updateUserInterestRate(_to);
+        }
+
+        return _value;
+    }
+
     /**
      * Updates the user's current interest rate, and keeps track of the timestamp of the change
      * @param _user The user that is interacting with the protocol
@@ -140,7 +184,7 @@ contract RebaseToken is ERC20, Ownable, AccessControl {
     }
 
     /*//////////////////////////////////////////////////////////////
-                        VIEW & PURE FUNCTIONS
+                INTERNAL/PRIVATE VIEW & PURE FUNCTIONS
     //////////////////////////////////////////////////////////////*/
     /**
      * @param _user The user whose accrued interest to calculate, since they last interacted with the protocol
@@ -157,6 +201,9 @@ contract RebaseToken is ERC20, Ownable, AccessControl {
         return (s_interestsRatesByUser[_user] * (block.timestamp - s_lastUpdatesByUser[_user]));
     }
 
+    /*//////////////////////////////////////////////////////////////
+                 EXTERNAL/PUBLIC VIEW & PURE FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
     /**
      * 
      * @param _user The user whose balance we want to check
