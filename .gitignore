@@ -12,10 +12,16 @@ broadcast/*
 # Docs
 docs/
 
-# Dotenv file
+# Dependencies
+lib/
+
+# Environment settings
 .env
+.password
 
 # scripts
 arb.sh
 
-foundry.toml
+# Dotenv/VsCode files
+.DS_Store
+.vscode/
